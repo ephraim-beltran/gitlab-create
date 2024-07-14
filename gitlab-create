@@ -1,1 +1,203 @@
 #!/usr/bin/env bash
+
+# Text Colours
+start="\e["
+bold="1;"
+end="\e[0m"
+error="31m"
+success="32m"
+warn="33m"
+alt="34m"
+
+namespace=""
+project=""
+git_ssh_base="git@ssh.beltran.cc"
+git_ssh_link="${git_ssh_base}:${namespace}/${project}.git"
+https_domain="https://git.beltran.cc"
+https_git_link="${https_domain}/${namespace}/${project}.git"
+
+function initialize() {
+    while [[ "${#}" -gt 0 ]]
+    do
+        case "${1}" in
+            -n|--namespace)
+                namespace="${2}"
+                shift 2
+                ;;
+            -p|--project)
+                project="${2}"
+                shift 2
+                ;;
+            -h|--help)
+                usageInitialize
+                exit 0
+                ;;
+            * )
+                parameterError
+                exit 127
+                ;;
+        esac
+    done
+    checkRepo
+    echo "Repo initializing"
+    if [[ "${namespace}" == "" || "${project}" == "" ]]; then
+        echo "No project name or namespace provided"
+        interactiveInit
+    else
+        echo "Project ${project} will be created at ${namespace}"
+    fi
+}
+function checkRepo() {
+    echo "Checking if current directory is a git repository"
+    if [[ -d ".git" ]]; then
+        echo "Repo is ready for remote upload"
+    else
+        echo "Current working directory ($PWD) is not a git repository"
+        exit 2
+    fi
+}
+function interactiveInit() {
+    echo "Starting interactive initialization"
+    read -p "Enter project name: " project_name
+    project=${project_name:-gitlab-repo}
+    read -p "Enter GitLab username/group (ensure proper keys are set): " user_name
+    namespace=${user_name:-git}
+    echo ""
+    echo "Remote repo will be created at: ${https_git_link}"
+    read -p "Proceed with repo creation? (y/N): " answer
+
+    if [[ "$answer" == "y" || "${answer}" == "Y" ]]; then
+        pushToRemote
+        addRemote
+    else
+        echo "Repo will not be created"
+    fi
+
+}
+function pushToRemote() {
+    echo "Creating a remote repo at ${https_git_link} using ssh"
+    if git push --set-upstream $git_ssh_link
+    then
+        echo "Remote repo created"
+    else
+        echo "Failed to create a remote repo"
+        exit 1
+    fi
+}
+function addRemote() {
+    echo "Adding remote connection using ${git_ssh_link}"
+    if git remote add origin ${git_ssh_link} ; then
+        echo "Remote connection added. You can now push to remote by command"
+    else
+        echo "Failed to create a remote connection"
+        exit 1
+    fi
+}
+
+
+function config() {
+    while [[ "${#}" -gt 0 ]]
+    do
+        case "${1}" in
+            "")
+                copyConfig
+                ;;
+            -r|deploy)
+                renameConfig
+                ;;
+            -h|--help)
+                usageConfig
+                exit 0
+                ;;
+            * )
+                parameterError
+                exit 127
+                ;;
+        esac
+    done
+    checkFileExist
+}
+function copyConfig() {
+    checkTemplate
+    copyToDirectory
+}
+function checkTemplate() {
+    if [[ -e "$HOME/Templates/vite.gitlab-ci.yml" ]]; then
+        echo "Pipeline config found in "~/Templates""
+    else
+        echo -e "${start}${error}Error: Pipeline config not found in the Templates directory${end}"
+        exit 2
+    fi
+}
+function copyToDirectory() {
+    if cp $HOME/Templates/vite.gitlab-ci.yml ./gitlab-ci.yml
+    then
+        echo -e "${start}${success}SUCCESS: "gitlab-ci.yml" was successfully created in $PWD${end}"
+    else
+        echo -e "${start}${error}Error: File creation failed${end}"
+        exit 1
+    fi
+}
+function renameConfig() {
+    if mv gitlab-ci.yml ./.gitlab-ci.yml
+    then
+        echo "Pipeline config have been renamed. Make sure you are using the proper configuration"
+    else
+        echo -e "${start}${error}Error: Rename failed${end}"
+        exit 2
+    fi
+}
+function checkFileExist() {
+    if [[ -e "gitlab-ci.yml" ]]; then
+        echo -e "${start}${warn}Pipeline config file exist but is not using the correct filename.${end}"
+        echo -e "Make sure to rename config file to ""${start}${bold}0m".gitlab-ci.yml"${end} to apply it"
+    elif [[ -e ".gitlab-ci.yml" ]]; then
+            echo -e "${start}${warn}Pipeline config exist and is using the proper filename. Make sure Pipeline configuration is working${end}"
+    else
+        echo -e "${start}${warn}Pipeline config file not found. It may exist but is under a different name. Please rename it to apply it to the Pipeline${end}"
+    fi
+}
+function usageMain() {
+cat << EOF
+    ${0} -i | init [-n | --namespace <gitlab_namespace> | -p | --project <project_name>]
+         -c | config [-r | deploy]
+
+    COMMANDS
+        -i | init   :  This will create a remote repo at the config location
+        -c | config :  This will create a copy of the Pipeline config located at ~/Templates
+EOF
+}
+function usageInitialize() {
+cat << EOF
+    ${0} -i | init [-n | --namespace <gitlab_namespace> ] [-p | --project <project_name>]
+
+    NOTE: Use without flags to run interactive mode
+EOF
+}
+function usageConfig() {
+cat << EOF
+    ${0} -c | config [-n | --namespace <gitlab_namespace> ] [-p | --project <project_name>]
+
+                    Copy Pipeline config template to the current directory
+                    NOTE: Make sure template exists in the ~/Templates directory
+EOF
+}
+function main() {
+    case "${1}" in
+        -i|init)
+            initialize "${@:2}"
+            ;;
+        -c|config)
+            config ${@:2}
+            ;;
+        *|-h|--help)
+            usageMain
+            exit 0
+            ;;
+    esac
+}
+
+function parameterError() {
+    echo -e "${start}${error}Error: Unknown command${end}"
+}
+main "$@"
