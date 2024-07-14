@@ -63,24 +63,25 @@ function interactiveInit() {
     read -p "Enter GitLab username/group (ensure proper keys are set): " user_name
     namespace=${user_name:-git}
     echo ""
-    echo "Remote repo will be created at: ${https_git_link}"
+    echo "Remote repo will be created at: ${https_domain}/${namespace}/${project}.git"
     read -p "Proceed with repo creation? (y/N): " answer
 
     if [[ "$answer" == "y" || "${answer}" == "Y" ]]; then
         pushToRemote
         addRemote
     else
-        echo "Repo will not be created"
+        echo -e "${start}${warn}Repo will not be created${end}"
     fi
 
 }
 function pushToRemote() {
-    echo "Creating a remote repo at ${https_git_link} using ssh"
+    git_ssh_link="${git_ssh_base}:${namespace}/${project}.git"
+    echo "Creating a remote repo at ${https_domain}/${namespace}/${project}.git using ssh"
     if git push --set-upstream $git_ssh_link
     then
         echo "Remote repo created"
     else
-        echo "Failed to create a remote repo"
+        echo -e "${start}${error}Failed to create a remote repo${$end}"
         exit 1
     fi
 }
@@ -89,7 +90,7 @@ function addRemote() {
     if git remote add origin ${git_ssh_link} ; then
         echo "Remote connection added. You can now push to remote by command"
     else
-        echo "Failed to create a remote connection"
+        echo -e "${start}${error}Failed to create a remote connection${end}"
         exit 1
     fi
 }
